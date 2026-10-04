@@ -1,0 +1,5 @@
+privacare_dbs/
+*.db
+__pycache__/
+global_model.pth
+.DS_Store

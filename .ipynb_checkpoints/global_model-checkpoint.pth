@@ -1,0 +1,58 @@
+import flwr as fl
+import torch
+import torch.nn as nn
+from collections import OrderedDict
+
+# Define the architecture so the server knows how to reconstruct the weights
+class DiagnosticNet(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.layer1 = nn.Linear(30, 16)
+        self.relu = nn.ReLU()
+        self.layer2 = nn.Linear(16, 8)
+        self.output = nn.Linear(8, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        return self.sigmoid(self.output(self.relu(self.layer2(self.relu(self.layer1(x))))))
+
+def weighted_average(metrics):
+    accuracies = [num_examples * m["accuracy"] for num_examples, m in metrics]
+    examples = [num_examples for num_examples, _ in metrics]
+    return {"accuracy": sum(accuracies) / sum(examples)}
+
+# Custom Strategy to save the model on the final round
+class SaveModelStrategy(fl.server.strategy.FedAvg):
+    def aggregate_fit(self, server_round, results, failures):
+        aggregated_parameters, aggregated_metrics = super().aggregate_fit(server_round, results, failures)
+        
+        if aggregated_parameters is not None and server_round == 3:
+            print("[PRIVACARE SERVER] Saving final global model to Mac...")
+            ndarrays = fl.common.parameters_to_ndarrays(aggregated_parameters)
+            
+            model = DiagnosticNet()
+            params_dict = zip(model.state_dict().keys(), ndarrays)
+            state_dict = OrderedDict({k: torch.tensor(v) for k, v in params_dict})
+            model.load_state_dict(state_dict, strict=True)
+            
+            # Save it directly to the root directory
+            torch.save(model.state_dict(), "global_model.pth")
+            print("[PRIVACARE SERVER] global_model.pth saved successfully!")
+            
+        return aggregated_parameters, aggregated_metrics
+
+strategy = SaveModelStrategy(
+    fraction_fit=1.0,
+    fraction_evaluate=1.0,
+    min_fit_clients=3,
+    min_evaluate_clients=3,
+    min_available_clients=3,
+    evaluate_metrics_aggregation_fn=weighted_average,
+)
+
+print("[PRIVACARE SERVER] Starting federated coordinator on 0.0.0.0:8080...")
+fl.server.start_server(
+    server_address="0.0.0.0:8080",
+    config=fl.server.ServerConfig(num_rounds=3),
+    strategy=strategy,
+)

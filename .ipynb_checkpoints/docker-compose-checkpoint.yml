@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  server:
+    build: .
+    command: python server.py
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/app
+    networks:
+      - privacare-net
+
+  hospital_a:
+    build: .
+    command: python client.py
+    environment:
+      - HOSPITAL_ID=hospital_A
+      - SERVER_ADDRESS=server:8080
+    depends_on:
+      - server
+    networks:
+      - privacare-net
+
+  hospital_b:
+    build: .
+    command: python client.py
+    environment:
+      - HOSPITAL_ID=hospital_B
+      - SERVER_ADDRESS=server:8080
+    depends_on:
+      - server
+    networks:
+      - privacare-net
+
+  hospital_c:
+    build: .
+    command: python client.py
+    environment:
+      - HOSPITAL_ID=hospital_C
+      - SERVER_ADDRESS=server:8080
+    depends_on:
+      - server
+    networks:
+      - privacare-net
+
+networks:
+  privacare-net:
+    driver: bridge
